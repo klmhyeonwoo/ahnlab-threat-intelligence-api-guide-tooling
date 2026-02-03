@@ -1,13 +1,10 @@
 "use client"
 
 import React, { useState, useRef } from "react"
-import DOMPurify from "isomorphic-dompurify"
 import { BlockEditor } from "@/components/block-editor"
 import { Button } from "@/components/ui/button"
+import { sanitizeHtml } from "@/lib/sanitize"
 import { Upload, Download, FileText, Code2 } from "lucide-react"
-
-const sanitizeHtml = (value: string) =>
-  DOMPurify.sanitize(value, { ALLOWED_TAGS: ["strong", "em", "b", "i", "u", "br", "code"] })
 
 export default function Home() {
   const [guideData, setGuideData] = useState<GuideData>({

@@ -1,8 +1,8 @@
 "use client"
 
 import React, { useState, useRef, useEffect, type KeyboardEvent, type DragEvent } from "react"
-import DOMPurify from "isomorphic-dompurify"
 import type { GuideData, Section, SubSection, ContentBlock } from "@/app/page"
+import { sanitizeHtml } from "@/lib/sanitize"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,9 +27,6 @@ import {
   ChevronUp,
   FolderPlus,
 } from "lucide-react"
-
-const sanitizeHtml = (value: string) =>
-  DOMPurify.sanitize(value, { ALLOWED_TAGS: ["strong", "em", "b", "i", "u", "br", "code"] })
 
 interface BlockEditorProps {
   guideData: GuideData
@@ -727,6 +724,7 @@ interface EditableTextProps {
 
 function EditableText({ value, onChange, placeholder, className = "", previewClassName = "" }: EditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
+  const hasPendingChangesRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
 
@@ -744,7 +742,10 @@ function EditableText({ value, onChange, placeholder, className = "", previewCla
   }, [localValue])
 
   const handleBlur = () => {
-    onChange(localValue)
+    if (hasPendingChangesRef.current && localValue !== value) {
+      onChange(localValue)
+    }
+    hasPendingChangesRef.current = false
   }
 
   return (
@@ -755,9 +756,7 @@ function EditableText({ value, onChange, placeholder, className = "", previewCla
         onChange={(e) => {
           const nextValue = e.target.value
           setLocalValue(nextValue)
-          if (nextValue !== value) {
-            onChange(nextValue)
-          }
+          hasPendingChangesRef.current = true
         }}
         onBlur={handleBlur}
         placeholder={placeholder}
@@ -783,6 +782,7 @@ interface EditableCodeProps {
 
 function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   const [localValue, setLocalValue] = useState(value)
+  const hasPendingChangesRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -790,7 +790,10 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   }, [value])
 
   const handleBlur = () => {
-    onChange(localValue)
+    if (hasPendingChangesRef.current && localValue !== value) {
+      onChange(localValue)
+    }
+    hasPendingChangesRef.current = false
   }
 
   return (
@@ -800,9 +803,7 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
       onChange={(e) => {
         const nextValue = e.target.value
         setLocalValue(nextValue)
-        if (nextValue !== value) {
-          onChange(nextValue)
-        }
+        hasPendingChangesRef.current = true
       }}
       onBlur={handleBlur}
       placeholder={placeholder}
