@@ -724,7 +724,7 @@ interface EditableTextProps {
 
 function EditableText({ value, onChange, placeholder, className = "", previewClassName = "" }: EditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
-  const hasPendingChangesRef = useRef(false)
+  const pendingChangesRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
 
@@ -742,10 +742,10 @@ function EditableText({ value, onChange, placeholder, className = "", previewCla
   }, [localValue])
 
   const handleBlur = () => {
-    if (hasPendingChangesRef.current && localValue !== value) {
+    if (pendingChangesRef.current && localValue !== value) {
       onChange(localValue)
+      pendingChangesRef.current = false
     }
-    hasPendingChangesRef.current = false
   }
 
   return (
@@ -756,7 +756,7 @@ function EditableText({ value, onChange, placeholder, className = "", previewCla
         onChange={(e) => {
           const nextValue = e.target.value
           setLocalValue(nextValue)
-          hasPendingChangesRef.current = true
+          pendingChangesRef.current = true
         }}
         onBlur={handleBlur}
         placeholder={placeholder}
@@ -782,7 +782,7 @@ interface EditableCodeProps {
 
 function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   const [localValue, setLocalValue] = useState(value)
-  const hasPendingChangesRef = useRef(false)
+  const pendingChangesRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -790,10 +790,10 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   }, [value])
 
   const handleBlur = () => {
-    if (hasPendingChangesRef.current && localValue !== value) {
+    if (pendingChangesRef.current && localValue !== value) {
       onChange(localValue)
+      pendingChangesRef.current = false
     }
-    hasPendingChangesRef.current = false
   }
 
   return (
@@ -803,7 +803,7 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
       onChange={(e) => {
         const nextValue = e.target.value
         setLocalValue(nextValue)
-        hasPendingChangesRef.current = true
+        pendingChangesRef.current = true
       }}
       onBlur={handleBlur}
       placeholder={placeholder}
