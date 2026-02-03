@@ -10,7 +10,7 @@ export default function Home() {
     title: "API 사용자 가이드",
     sections: [],
   })
-  const [showCode, setShowCode] = useState(false)
+  const [showCode, setShowCode] = useState<false | true | "preview">(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleImportClick = () => {
@@ -81,9 +81,13 @@ export default function Home() {
               <Upload className="w-4 h-4 mr-1.5" />
               가져오기
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowCode(!showCode)}>
+            <Button variant="ghost" size="sm" onClick={() => setShowCode(showCode === true ? false : true)}>
               <Code2 className="w-4 h-4 mr-1.5" />
               HTML 코드
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowCode("preview")}>
+              <FileText className="w-4 h-4 mr-1.5" />
+              미리보기
             </Button>
             <Button size="sm" onClick={handleExport}>
               <Download className="w-4 h-4 mr-1.5" />
@@ -94,8 +98,10 @@ export default function Home() {
       </header>
       
       {/* 메인 컨텐츠 */}
-      {showCode ? (
+      {showCode === true ? (
         <HtmlCodeView guideData={guideData} onClose={() => setShowCode(false)} />
+      ) : showCode === "preview" ? (
+        <HtmlPreview guideData={guideData} onClose={() => setShowCode(false)} />
       ) : (
         <BlockEditor guideData={guideData} onChange={setGuideData} />
       )}
@@ -129,7 +135,7 @@ function parseHtmlToGuideData(html: string): GuideData {
     if (h1) {
       // 부모 섹션
       const section: Section = {
-        title: h1.textContent || "",
+        title: h1.innerHTML || "",
         content: parseContentBlocks(sectionEl, "h1"),
         subSections: [],
       }
@@ -141,7 +147,7 @@ function parseHtmlToGuideData(html: string): GuideData {
       const deprecated = navLink?.classList.contains("deprecated-ac-list") || false
       
       const subSection: SubSection = {
-        title: h2.textContent || "",
+        title: h2.innerHTML || "",
         content: parseContentBlocks(sectionEl, "h2"),
         deprecated,
       }
@@ -181,9 +187,9 @@ function parseContentBlocks(sectionEl: Element, skipTag: string): ContentBlock[]
         blocks.push({ type: "paragraph", text: child.innerHTML })
       }
     } else if (tagName === "h3") {
-      blocks.push({ type: "heading3", text: child.textContent || "" })
+      blocks.push({ type: "heading3", text: child.innerHTML || "" })
     } else if (tagName === "h4") {
-      blocks.push({ type: "heading4", text: child.textContent || "" })
+      blocks.push({ type: "heading4", text: child.innerHTML || "" })
     } else if (tagName === "code") {
       const pre = child.querySelector("pre")
       blocks.push({ 
@@ -258,6 +264,24 @@ function HtmlCodeView({ guideData, onClose }: { guideData: GuideData; onClose: (
       <pre className="flex-1 p-4 overflow-auto text-sm font-mono bg-muted/20">
         <code>{htmlCode}</code>
       </pre>
+    </div>
+  )
+}
+
+function HtmlPreview({ guideData, onClose }: { guideData: GuideData; onClose: () => void }) {
+  const htmlCode = generateHtml(guideData)
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      <div className="flex items-center justify-between p-3 border-b bg-muted/30">
+        <span className="text-sm font-medium">문서 미리보기</span>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          닫기
+        </Button>
+      </div>
+      <div className="flex-1 overflow-auto bg-white">
+        <div className="preview-frame" dangerouslySetInnerHTML={{ __html: htmlCode }} />
+      </div>
     </div>
   )
 }
