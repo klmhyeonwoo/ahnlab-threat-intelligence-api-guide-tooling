@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect, type KeyboardEvent, type DragEvent } from "react"
+import DOMPurify from "isomorphic-dompurify"
 import type { GuideData, Section, SubSection, ContentBlock } from "@/app/page"
 import {
   DropdownMenu,
@@ -26,6 +27,9 @@ import {
   ChevronUp,
   FolderPlus,
 } from "lucide-react"
+
+const sanitizeHtml = (value: string) =>
+  DOMPurify.sanitize(value, { ALLOWED_TAGS: ["strong", "em", "b", "i", "u", "br", "code"] })
 
 interface BlockEditorProps {
   guideData: GuideData
@@ -232,7 +236,15 @@ function EditableTitle({ value, onChange, className = "", placeholder = "제목 
 
   return (
     <div className={`editable-title ${className}`} onClick={() => setIsEditing(true)}>
-      {value ? <span dangerouslySetInnerHTML={{ __html: value }} /> : <span className="placeholder">{placeholder}</span>}
+      {value ? (
+        <span
+          dangerouslySetInnerHTML={{
+            __html: sanitizeHtml(value),
+          }}
+        />
+      ) : (
+        <span className="placeholder">{placeholder}</span>
+      )}
     </div>
   )
 }
@@ -756,7 +768,7 @@ function EditableText({ value, onChange, placeholder, className = "", previewCla
       <div
         ref={previewRef}
         className={`editable-text-preview ${previewClassName}`}
-        dangerouslySetInnerHTML={{ __html: localValue || "" }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(localValue || "") }}
       />
     </div>
   )
@@ -940,7 +952,7 @@ function TableInput({ value, onChange, className = "" }: TableInputProps) {
       <div
         ref={previewRef}
         className={`table-input-preview ${className}`}
-        dangerouslySetInnerHTML={{ __html: value || "" }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(value || "") }}
       />
     </div>
   )

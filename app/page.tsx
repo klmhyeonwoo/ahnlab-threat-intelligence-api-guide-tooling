@@ -1,9 +1,13 @@
 "use client"
 
 import React, { useState, useRef } from "react"
+import DOMPurify from "isomorphic-dompurify"
 import { BlockEditor } from "@/components/block-editor"
 import { Button } from "@/components/ui/button"
 import { Upload, Download, FileText, Code2 } from "lucide-react"
+
+const sanitizeHtml = (value: string) =>
+  DOMPurify.sanitize(value, { ALLOWED_TAGS: ["strong", "em", "b", "i", "u", "br", "code"] })
 
 export default function Home() {
   const [guideData, setGuideData] = useState<GuideData>({
@@ -270,6 +274,7 @@ function HtmlCodeView({ guideData, onClose }: { guideData: GuideData; onClose: (
 
 function HtmlPreview({ guideData, onClose }: { guideData: GuideData; onClose: () => void }) {
   const htmlCode = generateHtml(guideData)
+  const safeHtml = sanitizeHtml(htmlCode)
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
@@ -280,7 +285,7 @@ function HtmlPreview({ guideData, onClose }: { guideData: GuideData; onClose: ()
         </Button>
       </div>
       <div className="flex-1 overflow-auto bg-white">
-        <div className="preview-frame" dangerouslySetInnerHTML={{ __html: htmlCode }} />
+        <div className="preview-frame" dangerouslySetInnerHTML={{ __html: safeHtml }} />
       </div>
     </div>
   )
