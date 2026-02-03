@@ -19,7 +19,12 @@ const ALLOWED_TAGS = [
   "p",
   "pre",
   "s",
+  "body",
+  "head",
+  "html",
+  "meta",
   "section",
+  "title",
   "span",
   "strong",
   "table",
@@ -32,8 +37,20 @@ const ALLOWED_TAGS = [
   "ul",
 ]
 
-const ALLOWED_ATTR = ["class", "colspan", "href", "id", "language", "rel", "rowspan", "target"]
-const FORBID_TAGS = ["script", "style", "iframe", "object", "embed", "link", "meta"]
+const ALLOWED_ATTR = [
+  "charset",
+  "class",
+  "colspan",
+  "content",
+  "href",
+  "http-equiv",
+  "id",
+  "language",
+  "name",
+  "rel",
+  "rowspan",
+]
+const FORBID_TAGS = ["script", "style", "iframe", "object", "embed", "link"]
 const FORBID_ATTR = [
   "style",
   "onblur",
