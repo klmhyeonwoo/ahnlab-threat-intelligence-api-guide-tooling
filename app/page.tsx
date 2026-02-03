@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button"
 import { sanitizeHtml } from "@/lib/sanitize"
 import { Upload, Download, FileText, Code2 } from "lucide-react"
 
+type ViewMode = "editor" | "code" | "preview"
+
 export default function Home() {
   const [guideData, setGuideData] = useState<GuideData>({
     title: "API 사용자 가이드",
     sections: [],
   })
-  const [showCode, setShowCode] = useState<false | true | "preview">(false)
+  const [viewMode, setViewMode] = useState<ViewMode>("editor")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleImportClick = () => {
@@ -82,11 +84,11 @@ export default function Home() {
               <Upload className="w-4 h-4 mr-1.5" />
               가져오기
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowCode(showCode === true ? false : true)}>
+            <Button variant="ghost" size="sm" onClick={() => setViewMode(viewMode === "code" ? "editor" : "code")}>
               <Code2 className="w-4 h-4 mr-1.5" />
               HTML 코드
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowCode("preview")}>
+            <Button variant="ghost" size="sm" onClick={() => setViewMode("preview")}>
               <FileText className="w-4 h-4 mr-1.5" />
               미리보기
             </Button>
@@ -99,10 +101,10 @@ export default function Home() {
       </header>
       
       {/* 메인 컨텐츠 */}
-      {showCode === true ? (
-        <HtmlCodeView guideData={guideData} onClose={() => setShowCode(false)} />
-      ) : showCode === "preview" ? (
-        <HtmlPreview guideData={guideData} onClose={() => setShowCode(false)} />
+      {viewMode === "code" ? (
+        <HtmlCodeView guideData={guideData} onClose={() => setViewMode("editor")} />
+      ) : viewMode === "preview" ? (
+        <HtmlPreview guideData={guideData} onClose={() => setViewMode("editor")} />
       ) : (
         <BlockEditor guideData={guideData} onChange={setGuideData} />
       )}

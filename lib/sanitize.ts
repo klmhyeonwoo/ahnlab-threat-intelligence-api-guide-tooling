@@ -51,6 +51,12 @@ const FORBID_ATTR = [
   "onmouseover",
 ]
 
+/**
+ * Sanitizes user-authored HTML before rendering in the editor/preview.
+ * We allow only the subset of tags/attributes needed by the guide template
+ * and explicitly forbid script-related tags and event handler attributes.
+ * SAFE_FOR_TEMPLATES is disabled to avoid template injection patterns.
+ */
 export const sanitizeHtml = (value: string) =>
   DOMPurify.sanitize(value, {
     ALLOWED_TAGS,
