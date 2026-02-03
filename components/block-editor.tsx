@@ -869,6 +869,7 @@ const addRow = () => {
                     value={header}
                     onChange={(value) => updateHeader(index, value)}
                     className="header"
+                    isHeader
                   />
                   <button
                     type="button"
@@ -922,12 +923,13 @@ interface TableInputProps {
   value: string
   onChange: (value: string) => void
   className?: string
+  isHeader?: boolean
 }
 
-function TableInput({ value, onChange, className = "" }: TableInputProps) {
+function TableInput({ value, onChange, className = "", isHeader = false }: TableInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
-  const placeholder = className.includes("header") ? "항목" : "값"
+  const placeholder = isHeader ? "항목" : "값"
 
   useEffect(() => {
     if (textareaRef.current) {
