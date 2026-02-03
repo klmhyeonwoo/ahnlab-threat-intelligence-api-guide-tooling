@@ -131,6 +131,19 @@
   background-color: #fff;
 }
 
+.preview-frame {
+  width: 100%;
+}
+
+.preview-frame .api-guide {
+  min-height: auto;
+}
+
+.preview-frame .left-ac-list {
+  position: relative;
+  height: auto;
+}
+
 .left-ac-list {
   width: 280px;
   min-width: 280px;
@@ -743,6 +756,24 @@
 }
 
 /* Editable Text */
+.editable-text-wrapper {
+  position: relative;
+}
+
+.editable-text-preview {
+  position: absolute;
+  inset: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--foreground);
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0;
+  z-index: 2;
+}
+
 .editable-text {
   width: 100%;
   padding: 8px 12px;
@@ -756,6 +787,20 @@
   overflow: hidden;
   transition: all 0.15s;
   font-family: inherit;
+  position: relative;
+  z-index: 1;
+}
+
+.editable-text-wrapper .editable-text:not(:focus)[data-has-value="true"] + .editable-text-preview {
+  opacity: 1;
+}
+
+.editable-text-wrapper .editable-text:not(:focus)[data-has-value="true"] {
+  color: transparent;
+}
+
+.editable-text-wrapper .editable-text:focus + .editable-text-preview {
+  opacity: 0;
 }
 
 .editable-text:hover {
@@ -775,6 +820,19 @@
 }
 
 .editable-text.heading4-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  padding: 6px 12px;
+}
+
+.editable-text-preview.heading3-text {
+  font-size: 16px;
+  font-weight: 600;
+  padding: 6px 12px;
+}
+
+.editable-text-preview.heading4-text {
   font-size: 14px;
   font-weight: 600;
   color: var(--muted-foreground);
@@ -929,9 +987,49 @@
   width: 100%;
   padding: 10px 12px;
   font-size: 13px;
+  line-height: 1.5;
   background: transparent;
   border: none;
   outline: none;
+  resize: none;
+  overflow: hidden;
+  height: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.table-input-wrapper {
+  position: relative;
+}
+
+.table-input-preview {
+  position: absolute;
+  inset: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--foreground);
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0;
+  z-index: 2;
+}
+
+.table-input-preview.header {
+  font-weight: 600;
+}
+
+.table-input-wrapper .table-input:not(:focus)[data-has-value="true"] + .table-input-preview {
+  opacity: 1;
+}
+
+.table-input-wrapper .table-input:not(:focus)[data-has-value="true"] {
+  color: transparent;
+}
+
+.table-input-wrapper .table-input:focus + .table-input-preview {
+  opacity: 0;
 }
 
 .table-input.header {

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, type KeyboardEvent, type DragEvent } from "react"
 import type { GuideData, Section, SubSection, ContentBlock } from "@/app/page"
+import { sanitizeHtml } from "@/lib/sanitize"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -232,7 +233,15 @@ function EditableTitle({ value, onChange, className = "", placeholder = "제목 
 
   return (
     <div className={`editable-title ${className}`} onClick={() => setIsEditing(true)}>
-      {value || <span className="placeholder">{placeholder}</span>}
+      {value ? (
+        <span
+          dangerouslySetInnerHTML={{
+            __html: sanitizeHtml(value),
+          }}
+        />
+      ) : (
+        <span className="placeholder">{placeholder}</span>
+      )}
     </div>
   )
 }
@@ -592,6 +601,7 @@ function ContentBlockItem({
             onChange={(text) => onChange({ ...block, text })}
             placeholder="텍스트를 입력하세요..."
             className="paragraph-text"
+            previewClassName="editable-text-preview"
           />
         )}
 
@@ -601,6 +611,7 @@ function ContentBlockItem({
               value={block.text || ""}
               onChange={(text) => onChange({ ...block, text })}
               placeholder="경고 메시지를 입력하세요..."
+              previewClassName="editable-text-preview"
             />
           </div>
         )}
@@ -611,6 +622,7 @@ function ContentBlockItem({
               value={block.text || ""}
               onChange={(text) => onChange({ ...block, text })}
               placeholder="정보를 입력하세요..."
+              previewClassName="editable-text-preview"
             />
           </div>
         )}
@@ -621,6 +633,7 @@ function ContentBlockItem({
             onChange={(text) => onChange({ ...block, text })}
             placeholder="소제목 (H3)..."
             className="heading3-text"
+            previewClassName="heading3-text"
           />
         )}
 
@@ -630,6 +643,7 @@ function ContentBlockItem({
             onChange={(text) => onChange({ ...block, text })}
             placeholder="소제목 (H4)..."
             className="heading4-text"
+            previewClassName="heading4-text"
           />
         )}
 
@@ -705,11 +719,14 @@ interface EditableTextProps {
   onChange: (value: string) => void
   placeholder?: string
   className?: string
+  previewClassName?: string
 }
 
-function EditableText({ value, onChange, placeholder, className = "" }: EditableTextProps) {
+function EditableText({ value, onChange, placeholder, className = "", previewClassName = "" }: EditableTextProps) {
   const [localValue, setLocalValue] = useState(value)
+  const hasUncommittedChangesRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setLocalValue(value)
@@ -718,26 +735,41 @@ function EditableText({ value, onChange, placeholder, className = "" }: Editable
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+      const textHeight = textareaRef.current.scrollHeight
+      const previewHeight = previewRef.current?.scrollHeight || 0
+      textareaRef.current.style.height = `${Math.max(textHeight, previewHeight)}px`
     }
   }, [localValue])
 
   const handleBlur = () => {
-    if (localValue !== value) {
+    if (hasUncommittedChangesRef.current && localValue !== value) {
       onChange(localValue)
+      hasUncommittedChangesRef.current = false
     }
   }
 
   return (
-    <textarea
-      ref={textareaRef}
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={handleBlur}
-      placeholder={placeholder}
-      className={`editable-text ${className}`}
-      rows={1}
-    />
+    <div className="editable-text-wrapper">
+      <textarea
+        ref={textareaRef}
+        value={localValue}
+        onChange={(e) => {
+          const nextValue = e.target.value
+          setLocalValue(nextValue)
+          hasUncommittedChangesRef.current = true
+        }}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        className={`editable-text ${className}`}
+        rows={1}
+        data-has-value={localValue.length > 0}
+      />
+      <div
+        ref={previewRef}
+        className={`editable-text-preview ${previewClassName}`}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(localValue || "") }}
+      />
+    </div>
   )
 }
 
@@ -750,6 +782,7 @@ interface EditableCodeProps {
 
 function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   const [localValue, setLocalValue] = useState(value)
+  const hasUncommittedChangesRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -757,8 +790,9 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   }, [value])
 
   const handleBlur = () => {
-    if (localValue !== value) {
+    if (hasUncommittedChangesRef.current && localValue !== value) {
       onChange(localValue)
+      hasUncommittedChangesRef.current = false
     }
   }
 
@@ -766,7 +800,11 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
     <textarea
       ref={textareaRef}
       value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
+      onChange={(e) => {
+        const nextValue = e.target.value
+        setLocalValue(nextValue)
+        hasUncommittedChangesRef.current = true
+      }}
       onBlur={handleBlur}
       placeholder={placeholder}
       className="editable-code"
@@ -796,8 +834,8 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
     onChange({ ...tableData, rows: newRows })
   }
 
-  const addColumn = () => {
-    const newHeaders = [...tableData.headers, "새 열"]
+const addColumn = () => {
+  const newHeaders = [...tableData.headers, ""]
     const newRows = tableData.rows.map((row) => [...row, ""])
     onChange({ headers: newHeaders, rows: newRows })
   }
@@ -809,8 +847,8 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
     onChange({ headers: newHeaders, rows: newRows })
   }
 
-  const addRow = () => {
-    const newRow = tableData.headers.map(() => "")
+const addRow = () => {
+  const newRow = tableData.headers.map(() => "")
     onChange({ ...tableData, rows: [...tableData.rows, newRow] })
   }
 
@@ -828,11 +866,11 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
             {tableData.headers.map((header, index) => (
               <th key={index}>
                 <div className="table-header-cell">
-                  <input
-                    type="text"
+                  <TableInput
                     value={header}
-                    onChange={(e) => updateHeader(index, e.target.value)}
-                    className="table-input header"
+                    onChange={(value) => updateHeader(index, value)}
+                    className="header"
+                    isHeader
                   />
                   <button
                     type="button"
@@ -857,12 +895,7 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
             <tr key={rowIndex}>
               {row.map((cell, cellIndex) => (
                 <td key={cellIndex}>
-                  <input
-                    type="text"
-                    value={cell}
-                    onChange={(e) => updateCell(rowIndex, cellIndex, e.target.value)}
-                    className="table-input"
-                  />
+                  <TableInput value={cell} onChange={(value) => updateCell(rowIndex, cellIndex, value)} />
                 </td>
               ))}
               <td className="row-actions-cell">
@@ -883,6 +916,47 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
         <Plus className="w-4 h-4" />
         행 추가
       </button>
+    </div>
+  )
+}
+
+interface TableInputProps {
+  value: string
+  onChange: (value: string) => void
+  className?: string
+  isHeader?: boolean
+}
+
+function TableInput({ value, onChange, className = "", isHeader = false }: TableInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+  const placeholder = isHeader ? "항목" : "값"
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+      const textHeight = textareaRef.current.scrollHeight
+      const previewHeight = previewRef.current?.scrollHeight || 0
+      textareaRef.current.style.height = `${Math.max(textHeight, previewHeight)}px`
+    }
+  }, [value])
+
+  return (
+    <div className="table-input-wrapper">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`table-input ${className}`}
+        rows={1}
+        placeholder={placeholder}
+        data-has-value={value.length > 0}
+      />
+      <div
+        ref={previewRef}
+        className={`table-input-preview ${className}`}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(value || "") }}
+      />
     </div>
   )
 }
