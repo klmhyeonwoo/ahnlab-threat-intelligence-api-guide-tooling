@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, type KeyboardEvent, type DragEvent } from "react"
+import React, { useState, useRef, useEffect, useCallback, type DragEvent } from "react"
 import type { GuideData, Section, SubSection, ContentBlock } from "@/app/page"
 import {
   DropdownMenu,
@@ -25,8 +25,104 @@ import {
   ChevronDown,
   ChevronUp,
   FolderPlus,
+  Undo2,
+  Redo2,
 } from "lucide-react"
 
+// ─── Undo/Redo Hook ────────────────────────────────────────
+function useUndoRedo<T>(initial: T, onChange: (val: T) => void) {
+  const historyRef = useRef<T[]>([initial])
+  const indexRef = useRef(0)
+  const skipNextPushRef = useRef(false)
+
+  const push = useCallback((val: T) => {
+    if (skipNextPushRef.current) {
+      skipNextPushRef.current = false
+      return
+    }
+    const newHistory = historyRef.current.slice(0, indexRef.current + 1)
+    newHistory.push(val)
+    // 최대 50개까지만 보관
+    if (newHistory.length > 50) newHistory.shift()
+    historyRef.current = newHistory
+    indexRef.current = newHistory.length - 1
+  }, [])
+
+  const undo = useCallback(() => {
+    if (indexRef.current > 0) {
+      indexRef.current -= 1
+      skipNextPushRef.current = true
+      onChange(historyRef.current[indexRef.current])
+    }
+  }, [onChange])
+
+  const redo = useCallback(() => {
+    if (indexRef.current < historyRef.current.length - 1) {
+      indexRef.current += 1
+      skipNextPushRef.current = true
+      onChange(historyRef.current[indexRef.current])
+    }
+  }, [onChange])
+
+  const canUndo = indexRef.current > 0
+  const canRedo = indexRef.current < historyRef.current.length - 1
+
+  return { push, undo, redo, canUndo, canRedo }
+}
+
+// ─── 텍스트 서식 유틸리티 ──────────────────────────────────
+function wrapSelection(textarea: HTMLTextAreaElement, before: string, after: string): string {
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const text = textarea.value
+  const selected = text.slice(start, end)
+
+  // 이미 감싸져 있으면 제거
+  if (
+    text.slice(start - before.length, start) === before &&
+    text.slice(end, end + after.length) === after
+  ) {
+    return text.slice(0, start - before.length) + selected + text.slice(end + after.length)
+  }
+
+  return text.slice(0, start) + before + selected + after + text.slice(end)
+}
+
+function handleFormatShortcut(
+  e: React.KeyboardEvent<HTMLTextAreaElement>,
+  value: string,
+  onValueChange: (val: string) => void
+) {
+  const target = e.currentTarget
+
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    switch (e.key.toLowerCase()) {
+      case "b": {
+        e.preventDefault()
+        onValueChange(wrapSelection(target, "<b>", "</b>"))
+        return true
+      }
+      case "i": {
+        e.preventDefault()
+        onValueChange(wrapSelection(target, "<i>", "</i>"))
+        return true
+      }
+      case "u": {
+        e.preventDefault()
+        onValueChange(wrapSelection(target, "<u>", "</u>"))
+        return true
+      }
+      case "e": {
+        e.preventDefault()
+        onValueChange(wrapSelection(target, "<code>", "</code>"))
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// ─── 메인 BlockEditor ─────────────────────────────────────
 interface BlockEditorProps {
   guideData: GuideData
   onChange: (data: GuideData) => void
@@ -35,6 +131,41 @@ interface BlockEditorProps {
 export function BlockEditor({ guideData, onChange }: BlockEditorProps) {
   const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null)
   const [dragOverSectionIndex, setDragOverSectionIndex] = useState<number | null>(null)
+
+  const { push, undo, redo, canUndo, canRedo } = useUndoRedo(guideData, onChange)
+
+  // 데이터가 바뀔 때마다 히스토리에 push
+  const prevDataRef = useRef(guideData)
+  useEffect(() => {
+    if (prevDataRef.current !== guideData) {
+      push(guideData)
+      prevDataRef.current = guideData
+    }
+  }, [guideData, push])
+
+  // 글로벌 Ctrl+Z / Ctrl+Shift+Z
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // textarea/input 안에서는 기본 undo 동작 허용
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === "TEXTAREA" || tag === "INPUT") return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.shiftKey) {
+        e.preventDefault()
+        redo()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+        e.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [undo, redo])
 
   const updateTitle = (title: string) => {
     onChange({ ...guideData, title })
@@ -91,7 +222,29 @@ export function BlockEditor({ guideData, onChange }: BlockEditorProps) {
     <div className="block-editor">
       {/* 좌측 네비게이션 */}
       <nav className="block-editor-nav">
-        <div className="nav-header">목차</div>
+        <div className="nav-header">
+          <span>목차</span>
+          <div className="nav-undo-redo">
+            <button
+              type="button"
+              className="action-btn"
+              onClick={undo}
+              disabled={!canUndo}
+              title="되돌리기 (Ctrl+Z)"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={redo}
+              disabled={!canRedo}
+              title="다시 실행 (Ctrl+Shift+Z)"
+            >
+              <Redo2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
         <ul className="nav-list">
           {guideData.sections.map((section, idx) => {
             const sectionId = `section-${idx}`
@@ -135,12 +288,28 @@ export function BlockEditor({ guideData, onChange }: BlockEditorProps) {
           <Plus className="w-4 h-4" />
           섹션 추가
         </button>
+
+        {/* 단축키 안내 */}
+        <div className="shortcut-guide">
+          <div className="shortcut-guide-title">단축키</div>
+          <div className="shortcut-row"><kbd>Ctrl</kbd>+<kbd>Z</kbd> 되돌리기</div>
+          <div className="shortcut-row"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> 다시 실행</div>
+          <div className="shortcut-row"><kbd>Ctrl</kbd>+<kbd>B</kbd> 굵게</div>
+          <div className="shortcut-row"><kbd>Ctrl</kbd>+<kbd>I</kbd> 기울임</div>
+          <div className="shortcut-row"><kbd>Ctrl</kbd>+<kbd>U</kbd> 밑줄</div>
+          <div className="shortcut-row"><kbd>Ctrl</kbd>+<kbd>E</kbd> 인라인 코드</div>
+        </div>
       </nav>
 
       {/* 메인 에디터 영역 */}
       <main className="block-editor-main">
         {/* 문서 제목 */}
-        <EditableTitle value={guideData.title} onChange={updateTitle} className="doc-title" placeholder="문서 제목을 입력하세요..." />
+        <EditableTitle
+          value={guideData.title}
+          onChange={updateTitle}
+          className="doc-title"
+          placeholder="문서 제목을 입력하세요..."
+        />
 
         {/* 섹션 목록 */}
         {guideData.sections.map((section, index) => (
@@ -174,7 +343,7 @@ export function BlockEditor({ guideData, onChange }: BlockEditorProps) {
   )
 }
 
-// 인라인 수정 가능한 제목 컴포넌트
+// ─── 인라인 수정 가능한 제목 ──────────────────────────────
 interface EditableTitleProps {
   value: string
   onChange: (value: string) => void
@@ -205,10 +374,8 @@ function EditableTitle({ value, onChange, className = "", placeholder = "제목 
     }
   }
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      handleBlur()
-    }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") handleBlur()
     if (e.key === "Escape") {
       setLocalValue(value)
       setIsEditing(false)
@@ -237,7 +404,7 @@ function EditableTitle({ value, onChange, className = "", placeholder = "제목 
   )
 }
 
-// 섹션 블록 컴포넌트
+// ─── 섹션 블록 ────────────────────────────────────────────
 interface SectionBlockProps {
   section: Section
   sectionIndex: number
@@ -331,12 +498,11 @@ function SectionBlock({
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
     >
-      {/* 섹션 헤더 */}
       <div className="section-header">
         <div className={`section-actions ${showActions ? "visible" : ""}`}>
-          <button 
-            type="button" 
-            className="drag-handle" 
+          <button
+            type="button"
+            className="drag-handle"
             title="드래그하여 이동"
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -375,7 +541,6 @@ function SectionBlock({
         />
       </div>
 
-      {/* 콘텐츠 블록 */}
       <div className="section-content">
         {section.content.map((block, index) => (
           <ContentBlockItem
@@ -390,12 +555,9 @@ function SectionBlock({
             canMoveDown={index < section.content.length - 1}
           />
         ))}
-
-        {/* 블록 추가 버튼 */}
         <AddBlockButton onAdd={(type) => addContent(type)} />
       </div>
 
-      {/* 하위 섹션 */}
       {section.subSections?.map((sub, subIndex) => (
         <SubSectionBlock
           key={subIndex}
@@ -410,7 +572,7 @@ function SectionBlock({
   )
 }
 
-// 하위 섹션 블록
+// ─── 하위 섹션 블록 ───────────────────────────────────────
 interface SubSectionBlockProps {
   subSection: SubSection
   sectionIndex: number
@@ -506,14 +668,13 @@ function SubSectionBlock({ subSection, sectionIndex, subIndex, onChange, onRemov
             canMoveDown={index < subSection.content.length - 1}
           />
         ))}
-
         <AddBlockButton onAdd={(type) => addContent(type)} />
       </div>
     </div>
   )
 }
 
-// 콘텐츠 블록 아이템
+// ─── 콘텐츠 블록 아이템 ──────────────────────────────────
 interface ContentBlockItemProps {
   block: ContentBlock
   onChange: (block: ContentBlock) => void
@@ -699,7 +860,7 @@ function ContentBlockItem({
   )
 }
 
-// 인라인 텍스트 편집기
+// ─── 인라인 텍스트 편집기 ─────────────────────────────────
 interface EditableTextProps {
   value: string
   onChange: (value: string) => void
@@ -728,12 +889,21 @@ function EditableText({ value, onChange, placeholder, className = "" }: Editable
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    handleFormatShortcut(e, localValue, (newVal) => {
+      setLocalValue(newVal)
+      // 즉시 상위에도 반영
+      onChange(newVal)
+    })
+  }
+
   return (
     <textarea
       ref={textareaRef}
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       placeholder={placeholder}
       className={`editable-text ${className}`}
       rows={1}
@@ -741,7 +911,7 @@ function EditableText({ value, onChange, placeholder, className = "" }: Editable
   )
 }
 
-// 코드 편집기
+// ─── 코드 편집기 ──────────────────────────────────────────
 interface EditableCodeProps {
   value: string
   onChange: (value: string) => void
@@ -762,12 +932,29 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Tab 키로 들여쓰기
+    if (e.key === "Tab") {
+      e.preventDefault()
+      const target = e.currentTarget
+      const start = target.selectionStart
+      const end = target.selectionEnd
+      const newVal = localValue.slice(0, start) + "  " + localValue.slice(end)
+      setLocalValue(newVal)
+      // 커서 위치 복원
+      requestAnimationFrame(() => {
+        target.selectionStart = target.selectionEnd = start + 2
+      })
+    }
+  }
+
   return (
     <textarea
       ref={textareaRef}
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       placeholder={placeholder}
       className="editable-code"
       rows={4}
@@ -776,7 +963,7 @@ function EditableCode({ value, onChange, placeholder }: EditableCodeProps) {
   )
 }
 
-// 테이블 편집기
+// ─── 테이블 편집기 ────────────────────────────────────────
 interface EditableTableProps {
   tableData: { headers: string[]; rows: string[][] }
   onChange: (data: { headers: string[]; rows: string[][] }) => void
@@ -820,6 +1007,47 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
     onChange({ ...tableData, rows: newRows })
   }
 
+  // Tab: 다음 셀로 이동
+  const handleCellKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    rowIndex: number,
+    cellIndex: number
+  ) => {
+    // Ctrl+B 등 서식 단축키 처리
+    handleFormatShortcut(e, e.currentTarget.value, (newVal) => {
+      updateCell(rowIndex, cellIndex, newVal)
+    })
+
+    if (e.key === "Tab") {
+      e.preventDefault()
+      const nextCellIndex = cellIndex + 1
+      const nextRowIndex = rowIndex + (nextCellIndex >= tableData.headers.length ? 1 : 0)
+      const targetCellIndex = nextCellIndex >= tableData.headers.length ? 0 : nextCellIndex
+
+      if (nextRowIndex >= tableData.rows.length) {
+        // 마지막 셀이면 행 추가
+        addRow()
+      }
+
+      // 다음 셀로 포커스
+      requestAnimationFrame(() => {
+        const actualRow = Math.min(nextRowIndex, tableData.rows.length)
+        const selector = `[data-cell="${actualRow}-${targetCellIndex}"]`
+        const nextEl = document.querySelector<HTMLTextAreaElement>(selector)
+        nextEl?.focus()
+      })
+    }
+  }
+
+  const handleHeaderKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    index: number
+  ) => {
+    handleFormatShortcut(e, e.currentTarget.value, (newVal) => {
+      updateHeader(index, newVal)
+    })
+  }
+
   return (
     <div className="editable-table-wrapper">
       <table className="editable-table">
@@ -828,17 +1056,19 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
             {tableData.headers.map((header, index) => (
               <th key={index}>
                 <div className="table-header-cell">
-                  <input
-                    type="text"
+                  <textarea
                     value={header}
                     onChange={(e) => updateHeader(index, e.target.value)}
-                    className="table-input header"
+                    onKeyDown={(e) => handleHeaderKeyDown(e, index)}
+                    className="table-cell-input header"
+                    rows={1}
                   />
                   <button
                     type="button"
                     onClick={() => removeColumn(index)}
                     className="table-remove-btn"
                     disabled={tableData.headers.length <= 1}
+                    title="열 삭제"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -846,7 +1076,7 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
               </th>
             ))}
             <th className="add-column-cell">
-              <button type="button" onClick={addColumn} className="table-add-btn">
+              <button type="button" onClick={addColumn} className="table-add-btn" title="열 추가">
                 <Plus className="w-4 h-4" />
               </button>
             </th>
@@ -857,11 +1087,24 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
             <tr key={rowIndex}>
               {row.map((cell, cellIndex) => (
                 <td key={cellIndex}>
-                  <input
-                    type="text"
+                  <textarea
+                    data-cell={`${rowIndex}-${cellIndex}`}
                     value={cell}
                     onChange={(e) => updateCell(rowIndex, cellIndex, e.target.value)}
-                    className="table-input"
+                    onKeyDown={(e) => handleCellKeyDown(e, rowIndex, cellIndex)}
+                    className="table-cell-input"
+                    rows={1}
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = "auto"
+                        el.style.height = `${Math.max(el.scrollHeight, 36)}px`
+                      }
+                    }}
+                    onInput={(e) => {
+                      const target = e.currentTarget
+                      target.style.height = "auto"
+                      target.style.height = `${Math.max(target.scrollHeight, 36)}px`
+                    }}
                   />
                 </td>
               ))}
@@ -871,6 +1114,7 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
                   onClick={() => removeRow(rowIndex)}
                   className="table-remove-btn"
                   disabled={tableData.rows.length <= 1}
+                  title="행 삭제"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -887,7 +1131,7 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
   )
 }
 
-// 블록 추가 버튼
+// ─── 블록 추가 버튼 ──────────────────────────────────────
 function AddBlockButton({ onAdd }: { onAdd: (type: ContentBlock["type"]) => void }) {
   return (
     <AddBlockMenu onSelect={onAdd}>
@@ -899,7 +1143,7 @@ function AddBlockButton({ onAdd }: { onAdd: (type: ContentBlock["type"]) => void
   )
 }
 
-// 블록 추가 메뉴
+// ─── 블록 추가 메뉴 ──────────────────────────────────────
 interface AddBlockMenuProps {
   onSelect: (type: ContentBlock["type"]) => void
   children: React.ReactNode
