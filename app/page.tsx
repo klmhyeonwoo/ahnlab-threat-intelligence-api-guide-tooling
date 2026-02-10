@@ -205,24 +205,43 @@ function parseContentBlocks(sectionEl: Element, skipTag: string): ContentBlock[]
       const headers: string[] = []
       const rows: string[][] = []
       
-      child.querySelectorAll("thead th").forEach(th => {
-        headers.push(th.innerHTML)
-      })
+      // thead 안의 th를 찾되, tr 안에 있든 없든 모두 처리
+      const thead = child.querySelector("thead")
+      if (thead) {
+        thead.querySelectorAll("th").forEach(th => {
+          headers.push(th.innerHTML.trim())
+        })
+      }
       
-      child.querySelectorAll("tbody tr").forEach(tr => {
+      // tbody가 없어도 tr을 찾음 (일부 비표준 테이블 대응)
+      const tbody = child.querySelector("tbody")
+      const trContainer = tbody || child
+      trContainer.querySelectorAll("tr").forEach(tr => {
+        // thead 안의 tr은 제외
+        if (tr.closest("thead")) return
         const row: string[] = []
         tr.querySelectorAll("td").forEach(td => {
-          row.push(td.innerHTML)
+          row.push(td.innerHTML.trim())
         })
-        rows.push(row)
+        if (row.length > 0) {
+          rows.push(row)
+        }
+      })
+
+      // 열 수 정규화: 헤더와 행의 열 수가 다를 수 있음
+      const colCount = Math.max(headers.length, ...rows.map(r => r.length), 1)
+      while (headers.length < colCount) headers.push("")
+      const normalizedRows = rows.map(row => {
+        while (row.length < colCount) row.push("")
+        return row
       })
       
-      if (headers.length > 0 || rows.length > 0) {
+      if (headers.length > 0 || normalizedRows.length > 0) {
         blocks.push({
           type: "table",
           tableData: { 
-            headers: headers.length > 0 ? headers : ["Column"],
-            rows: rows.length > 0 ? rows : [[""]]
+            headers,
+            rows: normalizedRows.length > 0 ? normalizedRows : [headers.map(() => "")]
           }
         })
       }

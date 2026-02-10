@@ -961,6 +961,44 @@
   background-color: var(--accent);
 }
 
+/* 테이블 셀 프리뷰 모드 */
+.table-cell-preview {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 36px;
+  cursor: text;
+  border-radius: 2px;
+  transition: background-color 0.15s;
+  word-break: break-word;
+}
+
+.table-cell-preview:hover {
+  background-color: var(--accent);
+}
+
+.table-cell-preview.header {
+  font-weight: 600;
+}
+
+.table-cell-preview ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.table-cell-preview ul li {
+  margin-bottom: 2px;
+}
+
+.table-cell-preview p {
+  margin: 0 0 4px;
+}
+
+.table-cell-placeholder {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
 .table-remove-btn {
   display: flex;
   align-items: center;

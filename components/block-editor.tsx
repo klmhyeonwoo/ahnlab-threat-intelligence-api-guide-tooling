@@ -970,82 +970,49 @@ interface EditableTableProps {
 }
 
 function EditableTable({ tableData, onChange }: EditableTableProps) {
+  // 행/열 수 정규화 (모든 행이 헤더 수와 같은 열 수를 가지도록)
+  const colCount = tableData.headers.length
+  const normalizedRows = tableData.rows.map((row) => {
+    if (row.length === colCount) return row
+    if (row.length < colCount) return [...row, ...Array(colCount - row.length).fill("")]
+    return row.slice(0, colCount)
+  })
+
   const updateHeader = (index: number, value: string) => {
     const newHeaders = [...tableData.headers]
     newHeaders[index] = value
-    onChange({ ...tableData, headers: newHeaders })
+    onChange({ headers: newHeaders, rows: normalizedRows })
   }
 
   const updateCell = (rowIndex: number, cellIndex: number, value: string) => {
-    const newRows = tableData.rows.map((row, rIdx) =>
-      rIdx === rowIndex ? row.map((cell, cIdx) => (cIdx === cellIndex ? value : cell)) : row
+    const newRows = normalizedRows.map((row, rIdx) =>
+      rIdx === rowIndex ? row.map((cell, cIdx) => (cIdx === cellIndex ? value : cell)) : [...row]
     )
-    onChange({ ...tableData, rows: newRows })
+    onChange({ headers: tableData.headers, rows: newRows })
   }
 
   const addColumn = () => {
     const newHeaders = [...tableData.headers, "새 열"]
-    const newRows = tableData.rows.map((row) => [...row, ""])
+    const newRows = normalizedRows.map((row) => [...row, ""])
     onChange({ headers: newHeaders, rows: newRows })
   }
 
   const removeColumn = (index: number) => {
     if (tableData.headers.length <= 1) return
     const newHeaders = tableData.headers.filter((_, i) => i !== index)
-    const newRows = tableData.rows.map((row) => row.filter((_, i) => i !== index))
+    const newRows = normalizedRows.map((row) => row.filter((_, i) => i !== index))
     onChange({ headers: newHeaders, rows: newRows })
   }
 
   const addRow = () => {
     const newRow = tableData.headers.map(() => "")
-    onChange({ ...tableData, rows: [...tableData.rows, newRow] })
+    onChange({ headers: tableData.headers, rows: [...normalizedRows, newRow] })
   }
 
   const removeRow = (index: number) => {
-    if (tableData.rows.length <= 1) return
-    const newRows = tableData.rows.filter((_, i) => i !== index)
-    onChange({ ...tableData, rows: newRows })
-  }
-
-  // Tab: 다음 셀로 이동
-  const handleCellKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>,
-    rowIndex: number,
-    cellIndex: number
-  ) => {
-    // Ctrl+B 등 서식 단축키 처리
-    handleFormatShortcut(e, e.currentTarget.value, (newVal) => {
-      updateCell(rowIndex, cellIndex, newVal)
-    })
-
-    if (e.key === "Tab") {
-      e.preventDefault()
-      const nextCellIndex = cellIndex + 1
-      const nextRowIndex = rowIndex + (nextCellIndex >= tableData.headers.length ? 1 : 0)
-      const targetCellIndex = nextCellIndex >= tableData.headers.length ? 0 : nextCellIndex
-
-      if (nextRowIndex >= tableData.rows.length) {
-        // 마지막 셀이면 행 추가
-        addRow()
-      }
-
-      // 다음 셀로 포커스
-      requestAnimationFrame(() => {
-        const actualRow = Math.min(nextRowIndex, tableData.rows.length)
-        const selector = `[data-cell="${actualRow}-${targetCellIndex}"]`
-        const nextEl = document.querySelector<HTMLTextAreaElement>(selector)
-        nextEl?.focus()
-      })
-    }
-  }
-
-  const handleHeaderKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>,
-    index: number
-  ) => {
-    handleFormatShortcut(e, e.currentTarget.value, (newVal) => {
-      updateHeader(index, newVal)
-    })
+    if (normalizedRows.length <= 1) return
+    const newRows = normalizedRows.filter((_, i) => i !== index)
+    onChange({ headers: tableData.headers, rows: newRows })
   }
 
   return (
@@ -1056,12 +1023,10 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
             {tableData.headers.map((header, index) => (
               <th key={index}>
                 <div className="table-header-cell">
-                  <textarea
+                  <TableCellEditor
                     value={header}
-                    onChange={(e) => updateHeader(index, e.target.value)}
-                    onKeyDown={(e) => handleHeaderKeyDown(e, index)}
-                    className="table-cell-input header"
-                    rows={1}
+                    onChange={(val) => updateHeader(index, val)}
+                    isHeader
                   />
                   <button
                     type="button"
@@ -1083,28 +1048,14 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
           </tr>
         </thead>
         <tbody>
-          {tableData.rows.map((row, rowIndex) => (
+          {normalizedRows.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {row.map((cell, cellIndex) => (
                 <td key={cellIndex}>
-                  <textarea
-                    data-cell={`${rowIndex}-${cellIndex}`}
+                  <TableCellEditor
                     value={cell}
-                    onChange={(e) => updateCell(rowIndex, cellIndex, e.target.value)}
-                    onKeyDown={(e) => handleCellKeyDown(e, rowIndex, cellIndex)}
-                    className="table-cell-input"
-                    rows={1}
-                    ref={(el) => {
-                      if (el) {
-                        el.style.height = "auto"
-                        el.style.height = `${Math.max(el.scrollHeight, 36)}px`
-                      }
-                    }}
-                    onInput={(e) => {
-                      const target = e.currentTarget
-                      target.style.height = "auto"
-                      target.style.height = `${Math.max(target.scrollHeight, 36)}px`
-                    }}
+                    onChange={(val) => updateCell(rowIndex, cellIndex, val)}
+                    dataCell={`${rowIndex}-${cellIndex}`}
                   />
                 </td>
               ))}
@@ -1113,7 +1064,7 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
                   type="button"
                   onClick={() => removeRow(rowIndex)}
                   className="table-remove-btn"
-                  disabled={tableData.rows.length <= 1}
+                  disabled={normalizedRows.length <= 1}
                   title="행 삭제"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -1127,6 +1078,89 @@ function EditableTable({ tableData, onChange }: EditableTableProps) {
         <Plus className="w-4 h-4" />
         행 추가
       </button>
+    </div>
+  )
+}
+
+// ─── 테이블 셀 편집기 (프리뷰/편집 토글) ─────────────────
+interface TableCellEditorProps {
+  value: string
+  onChange: (value: string) => void
+  isHeader?: boolean
+  dataCell?: string
+}
+
+function TableCellEditor({ value, onChange, isHeader = false, dataCell }: TableCellEditorProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [localValue, setLocalValue] = useState(value)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    setLocalValue(value)
+  }, [value])
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus()
+      // 자동 높이 맞추기
+      const el = textareaRef.current
+      el.style.height = "auto"
+      el.style.height = `${Math.max(el.scrollHeight, 36)}px`
+    }
+  }, [isEditing])
+
+  const handleBlur = () => {
+    setIsEditing(false)
+    if (localValue !== value) {
+      onChange(localValue)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    handleFormatShortcut(e, localValue, (newVal) => {
+      setLocalValue(newVal)
+      onChange(newVal)
+    })
+
+    if (e.key === "Escape") {
+      setLocalValue(value)
+      setIsEditing(false)
+    }
+  }
+
+  const hasHtml = /<[a-z][\s\S]*>/i.test(value)
+
+  if (isEditing) {
+    return (
+      <textarea
+        ref={textareaRef}
+        data-cell={dataCell}
+        value={localValue}
+        onChange={(e) => {
+          setLocalValue(e.target.value)
+          const el = e.currentTarget
+          el.style.height = "auto"
+          el.style.height = `${Math.max(el.scrollHeight, 36)}px`
+        }}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className={`table-cell-input ${isHeader ? "header" : ""}`}
+        rows={1}
+      />
+    )
+  }
+
+  // 프리뷰 모드 - HTML이 있으면 렌더링, 없으면 텍스트만
+  return (
+    <div
+      className={`table-cell-preview ${isHeader ? "header" : ""}`}
+      onClick={() => setIsEditing(true)}
+    >
+      {hasHtml ? (
+        <span dangerouslySetInnerHTML={{ __html: value }} />
+      ) : (
+        <span>{value || <span className="table-cell-placeholder">클릭하여 입력</span>}</span>
+      )}
     </div>
   )
 }
