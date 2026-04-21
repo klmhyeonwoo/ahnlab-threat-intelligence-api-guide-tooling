@@ -109,54 +109,92 @@ function parseHtmlToGuideData(html: string): GuideData {
   const doc = parser.parseFromString(html, "text/html")
   
   // 제목 추출
-  const apiTitle = doc.querySelector(".api-title")?.textContent || 
-                   doc.querySelector("title")?.textContent || 
+  const apiTitle = doc.querySelector(".api-title")?.textContent?.trim() || 
+                   doc.querySelector("title")?.textContent?.trim() || 
                    "API 사용자 가이드"
   
-  // 섹션 추출
-  const sections: Section[] = []
-  const sectionElements = doc.querySelectorAll(".right-guide-area section, .right-ac-area section")
+  // 네비게이션에서 부모-자식 관계 파악
+  const navParentIds = new Set<string>()   // 부모 섹션 ID
+  const navChildMap = new Map<string, string>() // 자식 ID → 부모 ID
+  const navDeprecated = new Set<string>()  // deprecated ID
   
-  // 부모 섹션과 하위 섹션 분리
-  const parentSections: Map<string, { element: Element; section: Section }> = new Map()
-  const subSectionMap: Map<string, SubSection[]> = new Map()
-  
-  sectionElements.forEach((sectionEl) => {
-    const id = sectionEl.getAttribute("id") || ""
-    const h1 = sectionEl.querySelector("h1")
-    const h2 = sectionEl.querySelector("h2")
+  const navLinks = doc.querySelectorAll(".left-ac-list a[href^='#']")
+  navLinks.forEach((link) => {
+    const href = link.getAttribute("href")?.slice(1) || ""
+    if (!href) return
     
-    if (h1) {
-      // 부모 섹션
-      const section: Section = {
-        title: h1.textContent || "",
-        content: parseContentBlocks(sectionEl, "h1"),
-        subSections: [],
+    if (link.classList.contains("deprecated-ac-list")) {
+      navDeprecated.add(href)
+    }
+    
+    // 부모 li 안에 중첩 ul > li > a 인지 확인
+    const parentUl = link.closest("ul")
+    if (parentUl && !parentUl.classList.contains("scroll-box")) {
+      // 중첩 ul 안에 있음 → 자식 섹션
+      const parentLi = parentUl.closest("li")
+      if (parentLi) {
+        const parentLink = parentLi.querySelector(":scope > a[href^='#']")
+        if (parentLink) {
+          const parentId = parentLink.getAttribute("href")?.slice(1) || ""
+          navChildMap.set(href, parentId)
+          navParentIds.add(parentId)
+        }
       }
-      parentSections.set(id, { element: sectionEl, section })
-    } else if (h2) {
-      // 하위 섹션
-      const parentId = id.replace(/_\d+$/, "")
-      const navLink = doc.querySelector(`a[href="#${id}"]`)
-      const deprecated = navLink?.classList.contains("deprecated-ac-list") || false
-      
-      const subSection: SubSection = {
-        title: h2.textContent || "",
-        content: parseContentBlocks(sectionEl, "h2"),
-        deprecated,
-      }
-      
-      if (!subSectionMap.has(parentId)) {
-        subSectionMap.set(parentId, [])
-      }
-      subSectionMap.get(parentId)!.push(subSection)
     }
   })
   
-  // 하위 섹션 연결
-  parentSections.forEach((value, id) => {
-    value.section.subSections = subSectionMap.get(id) || []
-    sections.push(value.section)
+  // 섹션 엘리먼트를 순서대로 파싱
+  const sectionElements = doc.querySelectorAll(".right-guide-area section, .right-ac-area section")
+  
+  // 부모 섹션과 하위 섹션을 정렬된 순서로 수집
+  const parentSectionMap = new Map<string, Section>()
+  const parentOrder: string[] = []
+  const childSectionMap = new Map<string, SubSection[]>()
+  
+  sectionElements.forEach((sectionEl) => {
+    const id = sectionEl.getAttribute("id") || ""
+    if (!id) return
+    
+    const isChildInNav = navChildMap.has(id)
+    const parentIdFromNav = navChildMap.get(id) || ""
+    
+    if (isChildInNav) {
+      // 네비게이션에서 자식으로 등록된 섹션
+      const heading = sectionEl.querySelector("h1, h2")
+      const deprecated = navDeprecated.has(id)
+      const skipTag = sectionEl.querySelector("h1") ? "h1" : "h2"
+      
+      const subSection: SubSection = {
+        title: heading?.textContent?.trim() || "",
+        content: parseContentBlocks(sectionEl, skipTag),
+        deprecated,
+      }
+      
+      if (!childSectionMap.has(parentIdFromNav)) {
+        childSectionMap.set(parentIdFromNav, [])
+      }
+      childSectionMap.get(parentIdFromNav)!.push(subSection)
+    } else {
+      // 부모 섹션 또는 독립 섹션
+      const heading = sectionEl.querySelector("h1, h2")
+      const skipTag = sectionEl.querySelector("h1") ? "h1" : (sectionEl.querySelector("h2") ? "h2" : "")
+      
+      const section: Section = {
+        title: heading?.textContent?.trim() || "",
+        content: skipTag ? parseContentBlocks(sectionEl, skipTag) : [],
+        subSections: [],
+      }
+      parentSectionMap.set(id, section)
+      parentOrder.push(id)
+    }
+  })
+  
+  // 하위 섹션을 부모에 연결
+  const sections: Section[] = []
+  parentOrder.forEach((id) => {
+    const section = parentSectionMap.get(id)!
+    section.subSections = childSectionMap.get(id) || []
+    sections.push(section)
   })
   
   return { title: apiTitle, sections }
@@ -170,7 +208,8 @@ function parseContentBlocks(sectionEl: Element, skipTag: string): ContentBlock[]
     const child = children[i]
     const tagName = child.tagName.toLowerCase()
     
-    if (tagName === skipTag.toLowerCase()) continue
+    // 첫 번째 heading(섹션 제목)은 스킵
+    if (skipTag && tagName === skipTag.toLowerCase() && i === firstIndexOfTag(children, skipTag)) continue
     
     if (tagName === "p") {
       if (child.classList.contains("api-wrn")) {
@@ -180,56 +219,96 @@ function parseContentBlocks(sectionEl: Element, skipTag: string): ContentBlock[]
       } else {
         blocks.push({ type: "paragraph", text: child.innerHTML })
       }
-    } else if (tagName === "h3") {
-      blocks.push({ type: "heading3", text: child.textContent || "" })
+    } else if (tagName === "h2" || tagName === "h3") {
+      // 섹션 내 소제목 (네비게이션에 없는 h2도 heading3으로 처리)
+      blocks.push({ type: "heading3", text: child.textContent?.trim() || "" })
     } else if (tagName === "h4") {
-      blocks.push({ type: "heading4", text: child.textContent || "" })
+      blocks.push({ type: "heading4", text: child.textContent?.trim() || "" })
     } else if (tagName === "code") {
+      // <code><pre>...</pre></code> 형태
       const pre = child.querySelector("pre")
       blocks.push({ 
         type: "code", 
         text: pre?.textContent || child.textContent || "",
         language: child.getAttribute("language") || "bash"
       })
+    } else if (tagName === "pre") {
+      // <pre><code>...</code></pre> 형태
+      const code = child.querySelector("code")
+      blocks.push({
+        type: "code",
+        text: code?.textContent || child.textContent || "",
+        language: code?.getAttribute("language") || "bash"
+      })
     } else if (tagName === "dl" && child.classList.contains("api-pre-box")) {
       const dt = child.querySelector("dt")
-      const code = child.querySelector("code")
-      const pre = child.querySelector("pre")
+      // <dl><dd><pre><code> 또는 <dl><dd><code><pre> 두 가지 패턴 지원
+      const dd = child.querySelector("dd")
+      const codeText = dd?.querySelector("code")?.textContent || 
+                       dd?.querySelector("pre")?.textContent || 
+                       dd?.textContent || ""
       blocks.push({
         type: "codeBox",
-        title: dt?.textContent || "",
-        text: pre?.textContent || code?.textContent || "",
-        language: code?.getAttribute("language") || "json"
+        title: dt?.textContent?.trim() || "",
+        text: codeText,
+        language: "json"
       })
     } else if (tagName === "table") {
       const headers: string[] = []
       const rows: string[][] = []
       
-      child.querySelectorAll("thead th").forEach(th => {
-        headers.push(th.innerHTML)
-      })
-      
-      child.querySelectorAll("tbody tr").forEach(tr => {
-        const row: string[] = []
-        tr.querySelectorAll("td").forEach(td => {
-          row.push(td.innerHTML)
-        })
-        rows.push(row)
-      })
-      
-      if (headers.length > 0 || rows.length > 0) {
-        blocks.push({
-          type: "table",
-          tableData: { 
-            headers: headers.length > 0 ? headers : ["Column"],
-            rows: rows.length > 0 ? rows : [[""]]
-          }
+      // thead 안의 th를 찾되, tr 안에 있든 없든 모두 처리
+      const thead = child.querySelector("thead")
+      if (thead) {
+        thead.querySelectorAll("th").forEach(th => {
+          headers.push(th.innerHTML.trim())
         })
       }
+      
+      // tbody가 없어도 tr을 찾음
+      const tbody = child.querySelector("tbody")
+      const trContainer = tbody || child
+      trContainer.querySelectorAll("tr").forEach(tr => {
+        if (tr.closest("thead")) return
+        const row: string[] = []
+        tr.querySelectorAll("td").forEach(td => {
+          row.push(td.innerHTML.trim())
+        })
+        if (row.length > 0) {
+          rows.push(row)
+        }
+      })
+
+      // 빈 테이블 스킵
+      if (headers.length === 0 && rows.length === 0) continue
+
+      // 열 수 정규화
+      const colCount = Math.max(headers.length, ...rows.map(r => r.length), 1)
+      while (headers.length < colCount) headers.push("")
+      const normalizedRows = rows.map(row => {
+        while (row.length < colCount) row.push("")
+        return row
+      })
+      
+      blocks.push({
+        type: "table",
+        tableData: { 
+          headers,
+          rows: normalizedRows.length > 0 ? normalizedRows : [headers.map(() => "")]
+        }
+      })
     }
   }
   
   return blocks
+}
+
+// children 중 특정 태그의 첫 번째 인덱스 반환
+function firstIndexOfTag(children: HTMLCollection, tag: string): number {
+  for (let i = 0; i < children.length; i++) {
+    if (children[i].tagName.toLowerCase() === tag.toLowerCase()) return i
+  }
+  return -1
 }
 
 function HtmlCodeView({ guideData, onClose }: { guideData: GuideData; onClose: () => void }) {
@@ -342,16 +421,12 @@ function renderContent(content: ContentBlock[]): string {
       case "heading4":
         return `        <h4>${block.text}</h4>\n`
       case "code":
-        return `        <code language="${block.language || 'bash'}">
-          <pre>${block.text}</pre>
-        </code>\n`
+        return `        <pre><code>${block.text}</code></pre>\n`
       case "codeBox":
         return `        <dl class="api-pre-box">
           <dt>${block.title || ''}</dt>
           <dd>
-            <code language="${block.language || 'json'}">
-              <pre>${block.text}</pre>
-            </code>
+            <pre><code>${block.text}</code></pre>
           </dd>
         </dl>\n`
       case "table":

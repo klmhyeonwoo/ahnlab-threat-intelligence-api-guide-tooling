@@ -406,12 +406,26 @@
 }
 
 .nav-header {
-  padding: 16px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 10px 16px;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted-foreground);
+}
+
+.nav-undo-redo {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-undo-redo .action-btn {
+  width: 28px;
+  height: 28px;
 }
 
 .nav-list {
@@ -925,21 +939,64 @@
   gap: 4px;
 }
 
-.table-input {
+.table-cell-input {
   width: 100%;
   padding: 10px 12px;
   font-size: 13px;
+  line-height: 1.5;
+  font-family: inherit;
   background: transparent;
   border: none;
   outline: none;
+  resize: none;
+  overflow: hidden;
+  min-height: 36px;
 }
 
-.table-input.header {
+.table-cell-input.header {
   font-weight: 600;
 }
 
-.table-input:focus {
+.table-cell-input:focus {
   background-color: var(--accent);
+}
+
+/* 테이블 셀 프리뷰 모드 */
+.table-cell-preview {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 36px;
+  cursor: text;
+  border-radius: 2px;
+  transition: background-color 0.15s;
+  word-break: break-word;
+}
+
+.table-cell-preview:hover {
+  background-color: var(--accent);
+}
+
+.table-cell-preview.header {
+  font-weight: 600;
+}
+
+.table-cell-preview ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.table-cell-preview ul li {
+  margin-bottom: 2px;
+}
+
+.table-cell-preview p {
+  margin: 0 0 4px;
+}
+
+.table-cell-placeholder {
+  color: var(--muted-foreground);
+  font-style: italic;
 }
 
 .table-remove-btn {
@@ -1072,4 +1129,46 @@ tr:hover .table-remove-btn {
 
 .empty-placeholder:hover svg {
   color: var(--primary);
+}
+
+/* Shortcut Guide */
+.shortcut-guide {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+
+.shortcut-guide-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  color: var(--muted-foreground);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+.shortcut-row kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 500;
+  background-color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-foreground);
 }
